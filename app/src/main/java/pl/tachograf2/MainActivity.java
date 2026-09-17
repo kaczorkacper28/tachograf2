@@ -2,6 +2,7 @@ package pl.tachograf2;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.*;
 import android.media.projection.MediaProjectionManager;
 import android.os.*;
