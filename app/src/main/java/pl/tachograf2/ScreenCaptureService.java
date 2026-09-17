@@ -46,27 +46,30 @@ public class ScreenCaptureService extends Service {
     }
 
     void process(ImageReader r,int sw,int sh){
-        long now=System.currentTimeMillis(); if(busy||now-lastOcr<500)return;
-        Image im=null; Bitmap full=null; Bitmap crop=null; Bitmap input=null;
+        long now=System.currentTimeMillis(); if(busy||now-lastOcr<450)return;
+        Image im=null; Bitmap full=null;
         try{
             im=r.acquireLatestImage(); if(im==null)return; busy=true; lastOcr=now;
-            Image.Plane p=im.getPlanes()[0]; int ps=p.getPixelStride(),rs=p.getRowStride(),pad=rs-ps*sw;
-            full=Bitmap.createBitmap(sw+pad/ps,sh,Bitmap.Config.ARGB_8888); full.copyPixelsFromBuffer(p.getBuffer());
-            SharedPreferences sp=getSharedPreferences("tachograf",0);
+            Image.Plane p=im.getPlanes()[0]; int ps=p.getPixelStride(),rs=p.getRowStride();
+            int paddedWidth=Math.max(sw,rs/Math.max(1,ps));
+            full=Bitmap.createBitmap(paddedWidth,sh,Bitmap.Config.ARGB_8888); full.copyPixelsFromBuffer(p.getBuffer());
 
-            // Prędkość w TOEU3 jest na dole po lewej. Domyślnie czytamy większy obszar,
-            // żeby nie ucinać cyfr przy różnych rozdzielczościach telefonu.
+            SharedPreferences sp=getSharedPreferences("tachograf",0);
             int x=clamp(sp.getInt("x",0),0,99);
             int y=clamp(sp.getInt("y",80),0,99);
             int w=clamp(sp.getInt("w",35),1,100-x);
             int h=clamp(sp.getInt("h",20),1,100-y);
-            int left=sw*x/100,top=sh*y/100,cw=Math.max(1,sw*w/100),ch=Math.max(1,sh*h/100);
-            crop=Bitmap.createBitmap(full,left,top,Math.min(cw,full.getWidth()-left),Math.min(ch,full.getHeight()-top));
+
+            int left=sw*x/100,top=sh*y/100;
+            int cw=Math.max(1,sw*w/100),ch=Math.max(1,sh*h/100);
+            cw=Math.min(cw,full.getWidth()-left); ch=Math.min(ch,full.getHeight()-top);
+            Bitmap crop=Bitmap.createBitmap(full,left,top,cw,ch);
             full.recycle();full=null;
 
-            // Duże powiększenie poprawia rozpoznawanie małych cyfr HUD-u.
-            input=Bitmap.createScaledBitmap(crop,Math.max(1,crop.getWidth()*3),Math.max(1,crop.getHeight()*3),true);
-            crop.recycle();crop=null;
+            // OCR dostaje powiększony, kontrastowy obraz HUD-u. Bierzemy kilka wariantów,
+            // ponieważ TOEU3 może renderować cyfry inaczej zależnie od rozdzielczości/UI.
+            Bitmap input=prepareForOcr(crop);
+            crop.recycle();
             Bitmap ocrBitmap=input;
             recognizer.process(InputImage.fromBitmap(ocrBitmap,0)).addOnSuccessListener(result->{
                 String raw=result.getText()==null?"":result.getText();
@@ -80,39 +83,59 @@ public class ScreenCaptureService extends Service {
                 getSharedPreferences("last",0).edit().putInt("speed",speed).putString("text",txt).putInt("confidence",conf).apply();
                 try{ocrBitmap.recycle();}catch(Exception ignored){} busy=false;
             }).addOnFailureListener(e->{try{ocrBitmap.recycle();}catch(Exception ignored){}busy=false;});
-            input=null;
-        }catch(Exception e){busy=false;}finally{
-            if(crop!=null)try{crop.recycle();}catch(Exception ignored){}
-            if(input!=null)try{input.recycle();}catch(Exception ignored){}
-            if(full!=null)try{full.recycle();}catch(Exception ignored){}
+        }catch(Exception e){busy=false;}
+        finally{
             if(im!=null)try{im.close();}catch(Exception ignored){}
+            if(full!=null)try{full.recycle();}catch(Exception ignored){}
         }
     }
 
+    Bitmap prepareForOcr(Bitmap src){
+        int w=Math.max(1,src.getWidth()*4), h=Math.max(1,src.getHeight()*4);
+        Bitmap scaled=Bitmap.createScaledBitmap(src,w,h,true);
+        Bitmap out=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+        Canvas canvas=new Canvas(out);
+        Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
+        ColorMatrix cm=new ColorMatrix();
+        cm.setSaturation(0f);
+        float[] m={1.7f,0,0,-80, 0,1.7f,0,-80, 0,0,1.7f,-80, 0,0,0,1};
+        cm.set(m);
+        paint.setColorFilter(new ColorMatrixColorFilter(cm));
+        canvas.drawBitmap(scaled,0,0,paint);
+        scaled.recycle();
+        return out;
+    }
+
     int parseSpeed(String s){
-        String normalized=s.toLowerCase();
-        // Najpierw szukamy liczby bezpośrednio związanej z km/h.
-        Matcher km=Pattern.compile("(\\d{1,3})\\s*(?:km\\s*/?\\s*h|kmh|k[mn]\\s*/?\\s*h)").matcher(normalized);
+        if(s==null)return -1;
+        String normalized=s.toLowerCase().replaceAll("[|]","1");
         int best=-1;
+
+        // 1. Liczba przy km/h — najwyższy priorytet.
+        Matcher km=Pattern.compile("(?<!\\d)(\\d{1,3})\\s*(?:km\\s*/?\\s*h|kmh|k[mn]\\s*/?\\s*h)(?!\\w)").matcher(normalized);
         while(km.find()){
             int n=safe(km.group(1));
             if(n>=0&&n<=160)best=n;
         }
         if(best>=0)return best;
 
-        // Jeśli gra pokazuje samo cyfry, wybieramy największą sensowną prędkość z HUD-u.
-        Matcher m=Pattern.compile("(?<!\\d)(\\d{1,3})(?!\\d)").matcher(s);
+        // 2. Typowe formaty cyfrowego HUD-u, np. "072", "72" lub "72 km".
+        Matcher m=Pattern.compile("(?<!\\d)(\\d{1,3})(?!\\d)").matcher(normalized);
         while(m.find()){
             int n=safe(m.group(1));
-            if(n>=0&&n<=160&&n>best)best=n;
+            if(n>=0&&n<=160){
+                // Odrzucamy pojedyncze cyfry, które często są elementem innych HUD-ów.
+                if(n>=10 || best<0)best=Math.max(best,n);
+            }
         }
         return best;
     }
 
     int estimateConfidence(String s,int speed){
         String n=s.toLowerCase();
-        if(n.matches(".*\\b"+speed+"\\s*(km\\s*/?\\s*h|kmh)\\b.*"))return 98;
-        return 82;
+        if(n.matches(".*\\b"+speed+"\\s*(km\\s*/?\\s*h|kmh)\\b.*"))return 99;
+        if(n.matches(".*\\b0*"+speed+"\\b.*"))return 90;
+        return 78;
     }
     int safe(String s){try{return Integer.parseInt(s);}catch(Exception e){return -1;}}
     int clamp(int v,int a,int b){return Math.max(a,Math.min(b,v));}
