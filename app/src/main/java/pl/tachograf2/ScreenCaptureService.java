@@ -7,8 +7,11 @@ import android.hardware.display.*;
 import android.media.*;
 import android.media.projection.*;
 import android.os.*;
+import android.util.DisplayMetrics;
 import com.google.mlkit.vision.common.InputImage;
-import com.google.mlkit.vision.text.*;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import java.util.regex.*;
 
 public class ScreenCaptureService extends Service {
@@ -30,8 +33,7 @@ public class ScreenCaptureService extends Service {
         startForeground(7,new Notification.Builder(this,"tachograf").setContentTitle("Tachograf2 — TOEU3 OCR").setContentText("Automatyczny odczyt HUD działa w tle").setSmallIcon(android.R.drawable.ic_menu_view).setOngoing(true).build());
         try{
             MediaProjectionManager m=(MediaProjectionManager)getSystemService(MEDIA_PROJECTION_SERVICE);
-            int code=intent.getIntExtra("code",Activity.RESULT_CANCELED);
-            Intent data;
+            int code=intent.getIntExtra("code",Activity.RESULT_CANCELED); Intent data;
             if(Build.VERSION.SDK_INT>=33)data=intent.getParcelableExtra("data",Intent.class);else data=intent.getParcelableExtra("data");
             if(data==null)return START_NOT_STICKY;
             projection=m.getMediaProjection(code,data); projection.registerCallback(projectionCallback,handler);
@@ -61,14 +63,14 @@ public class ScreenCaptureService extends Service {
                 int speed=parseSpeed(raw); int conf=speed>=0?estimateConfidence(raw,speed):0; if(speed<0)speed=0;
                 Intent out=new Intent(ACTION_SPEED); out.setPackage(getPackageName()); out.putExtra("speed",speed); out.putExtra("text",txt); out.putExtra("confidence",conf); sendBroadcast(out);
                 getSharedPreferences("last",0).edit().putInt("speed",speed).putString("text",txt).putInt("confidence",conf).apply();
-                input.recycle(); busy=false;
+                try{input.recycle();}catch(Exception ignored){} busy=false;
             }).addOnFailureListener(e->{try{input.recycle();}catch(Exception ignored){}busy=false;});
             crop=null;
         }catch(Exception e){busy=false;}finally{if(crop!=null)try{crop.recycle();}catch(Exception ignored){}if(full!=null)try{full.recycle();}catch(Exception ignored){}if(im!=null)try{im.close();}catch(Exception ignored){}}
     }
 
     int parseSpeed(String s){
-        String normalized=s.toLowerCase().replace('—','-');
+        String normalized=s.toLowerCase();
         Matcher km=Pattern.compile("(\\d{1,3})\\s*(?:km/?h|kmh|k[mn]/?h)").matcher(normalized);
         int best=-1; while(km.find()){int n=safe(km.group(1));if(n>=0&&n<=160)best=n;}
         if(best>=0)return best;
