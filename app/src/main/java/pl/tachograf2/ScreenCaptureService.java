@@ -20,6 +20,10 @@ public class ScreenCaptureService extends Service {
     Handler handler=new Handler(Looper.getMainLooper()); boolean busy=false; long lastOcr=0;
     MediaProjection.Callback projectionCallback;
 
+    // Automatyczny obszar HUD dla TOEU3: dolny-lewy fragment ekranu.
+    // Nie wymaga ustawiania przez użytkownika. Ustawienie jest wymuszane wersją profilu.
+    static final int HUD_PROFILE=2;
+
     @Override public void onCreate(){
         super.onCreate();
         NotificationChannel ch=new NotificationChannel("tachograf","Tachograf2",NotificationManager.IMPORTANCE_LOW);
@@ -54,11 +58,12 @@ public class ScreenCaptureService extends Service {
             int paddedWidth=Math.max(sw,rs/Math.max(1,ps));
             full=Bitmap.createBitmap(paddedWidth,sh,Bitmap.Config.ARGB_8888); full.copyPixelsFromBuffer(p.getBuffer());
 
-            SharedPreferences sp=getSharedPreferences("tachograf",0);
-            int x=clamp(sp.getInt("x",0),0,99);
-            int y=clamp(sp.getInt("y",78),0,99);
-            int w=clamp(sp.getInt("w",50),1,100-x);
-            int h=clamp(sp.getInt("h",22),1,100-y);
+            // Profil TOEU3 — stały, automatyczny obszar HUD. Stare ręczne ustawienia są ignorowane.
+            // Obejmuje dolny-lewy obszar, w którym TOEU3 wyświetla prędkość.
+            int x=0, y=78, w=50, h=22;
+            if(getSharedPreferences("tachograf",0).getInt("hudProfile",0)!=HUD_PROFILE){
+                getSharedPreferences("tachograf",0).edit().putInt("hudProfile",HUD_PROFILE).putInt("x",x).putInt("y",y).putInt("w",w).putInt("h",h).apply();
+            }
 
             int left=sw*x/100,top=sh*y/100;
             int cw=Math.max(1,sw*w/100),ch=Math.max(1,sh*h/100);
@@ -106,23 +111,16 @@ public class ScreenCaptureService extends Service {
         if(s==null)return -1;
         String normalized=s.toLowerCase().replaceAll("[|]","1").replaceAll("[oO]","0");
         int best=-1;
-
-        // Najpierw szukamy wartości bezpośrednio związanej z km/h.
         Matcher km=Pattern.compile("(?<!\\d)(\\d{1,3})\\s*(?:km\\s*/?\\s*h|kmh|k[mn]\\s*/?\\s*h)(?!\\w)").matcher(normalized);
         while(km.find()){
             int n=safe(km.group(1));
             if(n>=0&&n<=160)best=n;
         }
         if(best>=0)return best;
-
-        // TOEU3 często pokazuje samą liczbę, np. 50, 72 albo 090.
         Matcher m=Pattern.compile("(?<!\\d)(\\d{1,3})(?!\\d)").matcher(normalized);
         while(m.find()){
-            String g=m.group(1);
-            int n=safe(g);
-            if(n>=0&&n<=160){
-                if(g.length()>=2 || n>=10)best=Math.max(best,n);
-            }
+            String g=m.group(1); int n=safe(g);
+            if(n>=10&&n<=160 && g.length()>=2)best=Math.max(best,n);
         }
         return best;
     }
@@ -134,7 +132,6 @@ public class ScreenCaptureService extends Service {
         return 82;
     }
     int safe(String s){try{return Integer.parseInt(s);}catch(Exception e){return -1;}}
-    int clamp(int v,int a,int b){return Math.max(a,Math.min(b,v));}
 
     @Override public void onDestroy(){
         try{
