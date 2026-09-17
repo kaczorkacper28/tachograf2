@@ -37,7 +37,8 @@ public class MainActivity extends Activity {
     void buildUi(){
         ScrollView scroll=new ScrollView(this);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(18,18,18,24); root.setBackgroundColor(Color.rgb(9,10,11));
-        TextView title=t("🚛 TACHOGRAF CYFROWY",23); title.setGravity(Gravity.CENTER); root.addView(title,lp());
+        TextView appTitle=t("TACHOGRAF2 • v2.0",26); appTitle.setGravity(Gravity.CENTER); appTitle.setTypeface(null,1); root.addView(appTitle,lp());
+        TextView title=t("🚛 TACHOGRAF CYFROWY",20); title.setGravity(Gravity.CENTER); root.addView(title,lp());
         TextView sub=t("TRUCKERS OF EUROPE 3 • APK • AUTOMATYCZNA JAZDA Z HUD",11); sub.setGravity(Gravity.CENTER); root.addView(sub,lp());
         speed=t("0 km/h",44); speed.setGravity(Gravity.CENTER); speed.setPadding(0,28,0,10); root.addView(speed,lp());
         mode=t(driving?"🚗 JAZDA":"🛏 ODPOCZYNEK",16); mode.setGravity(Gravity.CENTER); root.addView(mode,lp());
