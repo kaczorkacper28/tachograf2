@@ -12,171 +12,34 @@ import android.widget.*;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-    static final int CAPTURE=401;
-    TextView speed,status,ocr,mode,times;
-    Button captureBtn;
-    long driveMs=0,totalMs=0,restMs=0,lastTick=System.currentTimeMillis();
-    long zeroSince=0;
-    double distanceKm=0.0;
-    int currentSpeed=0;
-    boolean driving=false;
-    SharedPreferences prefs;
-
-    @Override public void onCreate(Bundle b){
-        super.onCreate(b);
-        prefs=getSharedPreferences("tachograf",0);
-        loadSavedState();
-        lastTick=System.currentTimeMillis();
-        buildUi();
-        IntentFilter filter=new IntentFilter(ScreenCaptureService.ACTION_SPEED);
-        if(Build.VERSION.SDK_INT>=33) registerReceiver(receiver,filter,Context.RECEIVER_NOT_EXPORTED); else registerReceiver(receiver,filter);
-        if(Build.VERSION.SDK_INT>=33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},55);
-        new Handler(Looper.getMainLooper()).post(tick);
-    }
-
-    void buildUi(){
-        ScrollView scroll=new ScrollView(this);
-        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(18,18,18,24); root.setBackgroundColor(Color.rgb(9,10,11));
-        TextView appTitle=t("TACHOGRAF2 • v2.0",26); appTitle.setGravity(Gravity.CENTER); appTitle.setTypeface(null,1); root.addView(appTitle,lp());
-        TextView title=t("🚛 TACHOGRAF CYFROWY",20); title.setGravity(Gravity.CENTER); root.addView(title,lp());
-        TextView sub=t("TRUCKERS OF EUROPE 3 • APK • AUTOMATYCZNA JAZDA Z HUD",11); sub.setGravity(Gravity.CENTER); root.addView(sub,lp());
-        speed=t("0 km/h",44); speed.setGravity(Gravity.CENTER); speed.setPadding(0,28,0,10); root.addView(speed,lp());
-        mode=t(driving?"🚗 JAZDA":"🛏 ODPOCZYNEK",16); mode.setGravity(Gravity.CENTER); root.addView(mode,lp());
-        status=t("Status: NIEPOŁĄCZONY",14); ocr=t("OCR: ---",12); root.addView(status,lp()); root.addView(ocr,lp());
-        captureBtn=new Button(this); captureBtn.setText("📡 URUCHOM AUTOMATYCZNY ODCZYT"); captureBtn.setOnClickListener(v->startCapture()); root.addView(captureBtn,lp());
-        Button stop=new Button(this); stop.setText("⏹ ZATRZYMAJ ODCZYT"); stop.setOnClickListener(v->stopCapture()); root.addView(stop,lp());
-        LinearLayout modes=new LinearLayout(this); modes.setOrientation(LinearLayout.HORIZONTAL);
-        Button drive=new Button(this); drive.setText("🚗 JAZDA"); Button rest=new Button(this); rest.setText("🛏 ODPOCZYNEK");
-        modes.addView(drive,new LinearLayout.LayoutParams(0,-2,1)); modes.addView(rest,new LinearLayout.LayoutParams(0,-2,1)); root.addView(modes,lp());
-        drive.setOnClickListener(v->{driving=true;zeroSince=0;mode.setText("🚗 JAZDA");saveState();});
-        rest.setOnClickListener(v->{driving=false;currentSpeed=0;zeroSince=0;mode.setText("🛏 ODPOCZYNEK");saveState();});
-
-        Button newRoute=new Button(this);
-        newRoute.setText("🔄 NOWA TRASA");
-        newRoute.setOnClickListener(v->resetRoute());
-        root.addView(newRoute,lp());
-
-        TextView info=t("\n📱 AUTOMATYCZNA JAZDA\nPo uruchomieniu odczytu aplikacja czyta prędkość z dolnego lewego HUD-u TOEU3. Gdy pojazd ruszy (prędkość > 0), tachograf automatycznie rozpoczyna liczenie czasu jazdy. Gdy zatrzymasz pojazd (0 km/h), czas jazdy zatrzymuje się i zaczyna się przerwa. Dystans jest liczony z odczytanej prędkości.\n\n💾 DANE SĄ ZAPISYWANE AUTOMATYCZNIE — po zamknięciu i ponownym uruchomieniu aplikacji dystans oraz czasy zostają zachowane.\n\n⚠️ To symulator RP — nie jest certyfikowanym tachografem.",13); root.addView(info,lp());
-        TextView cropTitle=t("\n🎯 OBSZAR HUD-U TOEU3 — PRĘDKOŚĆ",16); root.addView(cropTitle,lp());
-        TextView cropHint=t("Poprawione ustawienia startowe dla prędkości z dolnego-lewego HUD-u: X 0%, Y 80%, szerokość 35%, wysokość 20%. Jeśli HUD jest w innym miejscu, możesz je zmienić.",12); root.addView(cropHint,lp());
-        LinearLayout crop=new LinearLayout(this); crop.setOrientation(LinearLayout.VERTICAL);
-        EditText x=field("X %",prefs.getInt("x",0)); EditText y=field("Y %",prefs.getInt("y",80)); EditText w=field("Szerokość %",prefs.getInt("w",35)); EditText h=field("Wysokość %",prefs.getInt("h",20));
-        crop.addView(x);crop.addView(y);crop.addView(w);crop.addView(h); root.addView(crop,lp());
-        Button save=new Button(this); save.setText("💾 ZAPISZ OBSZAR HUD"); save.setOnClickListener(v->{prefs.edit().putInt("x",num(x,0)).putInt("y",num(y,80)).putInt("w",num(w,35)).putInt("h",num(h,20)).apply(); Toast.makeText(this,"Obszar HUD zapisany",Toast.LENGTH_SHORT).show();}); root.addView(save,lp());
-        Button defaults=new Button(this); defaults.setText("🎯 DOMYŚLNY OBSZAR — DOLNY LEWY HUD"); defaults.setOnClickListener(v->{x.setText("0");y.setText("80");w.setText("35");h.setText("20");}); root.addView(defaults,lp());
-        times=t("",14); times.setPadding(4,20,4,4); root.addView(times,lp());
-        updateTimes();
-        scroll.addView(root); setContentView(scroll);
-    }
-    LinearLayout.LayoutParams lp(){return new LinearLayout.LayoutParams(-1,-2);}
-    TextView t(String s,int size){TextView v=new TextView(this);v.setText(s);v.setTextColor(Color.rgb(216,255,155));v.setTextSize(size);return v;}
-    EditText field(String hint,int val){EditText e=new EditText(this);e.setHint(hint);e.setText(String.valueOf(val));e.setTextColor(Color.WHITE);e.setHintTextColor(Color.GRAY);e.setInputType(2);return e;}
-    int num(EditText e,int def){try{return Math.max(0,Math.min(100,Integer.parseInt(e.getText().toString())));}catch(Exception ex){return def;}}
-    void startCapture(){MediaProjectionManager m=(MediaProjectionManager)getSystemService(MEDIA_PROJECTION_SERVICE);startActivityForResult(m.createScreenCaptureIntent(),CAPTURE);}
-    void stopCapture(){stopService(new Intent(this,ScreenCaptureService.class));status.setText("Status: ZATRZYMANY");captureBtn.setText("📡 URUCHOM AUTOMATYCZNY ODCZYT");saveState();}
-    @Override protected void onActivityResult(int r,int c,Intent data){super.onActivityResult(r,c,data);if(r==CAPTURE&&c==RESULT_OK&&data!=null){Intent i=new Intent(this,ScreenCaptureService.class);i.putExtra("code",c);i.putExtra("data",data);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);status.setText("Status: ODCZYT AKTYWNY");captureBtn.setText("🟢 ODCZYT AKTYWNY");}}
-
-    final BroadcastReceiver receiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
-        int s=i.getIntExtra("speed",0); String text=i.getStringExtra("text"); int conf=i.getIntExtra("confidence",0);
-        currentSpeed=Math.max(0,s);
-        speed.setText(currentSpeed+" km/h");
-        ocr.setText("OCR: "+(text==null?"---":text)+" • Pewność: "+conf+"%");
-
-        if(currentSpeed>0){
-            zeroSince=0;
-            if(!driving){
-                driving=true;
-                mode.setText("🚗 JAZDA");
-            }
-        } else if(driving){
-            if(zeroSince==0) zeroSince=System.currentTimeMillis();
-        }
-    }};
-
-    final Runnable tick=new Runnable(){public void run(){
-        long now=System.currentTimeMillis();
-        long d=Math.max(0,now-lastTick);
-        lastTick=now;
-
-        if(driving && currentSpeed==0 && zeroSince>0 && now-zeroSince>=2000){
-            driving=false;
-            mode.setText("🛏 ODPOCZYNEK");
-        }
-
-        if(driving){
-            driveMs+=d;
-            totalMs+=d;
-            restMs=0;
-            distanceKm += ((double)currentSpeed * d) / 3600000.0;
-        } else {
-            restMs+=d;
-            if(restMs>=45*60*1000L && driveMs>0){
-                driveMs=0;
-                restMs=0;
-            }
-        }
-
-        updateTimes();
-        saveState();
-        new Handler(Looper.getMainLooper()).postDelayed(this,500);
-    }};
-
-    void updateTimes(){
-        if(times==null)return;
-        times.setText("Jazda od pauzy: "+fmt(driveMs)+
-                "\nŁączna jazda: "+fmt(totalMs)+
-                "\nPrzerwa: "+fmt(restMs)+
-                "\nDystans: "+String.format(Locale.US,"%.2f km",distanceKm)+
-                "\n\n💾 Dane zapisane w pamięci telefonu\n⚠️ Limit ciągłej jazdy: 4:30 — symulator RP");
-    }
-
-    void resetRoute(){
-        new AlertDialog.Builder(this)
-                .setTitle("🔄 NOWA TRASA")
-                .setMessage("Wyzerować dystans oraz wszystkie czasy jazdy dla bieżącej trasy?")
-                .setNegativeButton("ANULUJ", null)
-                .setPositiveButton("WYZERUJ", (dialog, which) -> {
-                    driveMs=0;
-                    totalMs=0;
-                    restMs=0;
-                    distanceKm=0.0;
-                    currentSpeed=0;
-                    zeroSince=0;
-                    driving=false;
-                    lastTick=System.currentTimeMillis();
-                    mode.setText("🛏 ODPOCZYNEK");
-                    speed.setText("0 km/h");
-                    updateTimes();
-                    saveState();
-                    Toast.makeText(this,"Nowa trasa rozpoczęta — liczniki wyzerowane",Toast.LENGTH_SHORT).show();
-                })
-                .show();
-    }
-
-    void saveState(){
-        if(prefs==null)return;
-        prefs.edit()
-                .putLong("driveMs",driveMs)
-                .putLong("totalMs",totalMs)
-                .putLong("restMs",restMs)
-                .putLong("savedAt",System.currentTimeMillis())
-                .putLong("zeroSince",zeroSince)
-                .putFloat("distanceKm",(float)distanceKm)
-                .putBoolean("driving",driving)
-                .apply();
-    }
-
-    void loadSavedState(){
-        driveMs=prefs.getLong("driveMs",0);
-        totalMs=prefs.getLong("totalMs",0);
-        restMs=prefs.getLong("restMs",0);
-        distanceKm=prefs.getFloat("distanceKm",0f);
-        driving=prefs.getBoolean("driving",false);
-        zeroSince=0;
-    }
-
-    String fmt(long x){long s=x/1000,h=s/3600,m=(s%3600)/60,z=s%60;return String.format(Locale.US,"%02d:%02d:%02d",h,m,z);}
-    @Override protected void onPause(){saveState();super.onPause();}
-    @Override protected void onStop(){saveState();super.onStop();}
-    @Override protected void onDestroy(){saveState();try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onDestroy();}
+ static final int CAPTURE=401;
+ TextView speed,mode,ocr,status,display,times,cardInfo,vehicleInfo,activityLog,warning;
+ Button captureBtn; SharedPreferences prefs;
+ long driveMs,totalMs,restMs,todayDriveMs,weekDriveMs,twoWeekDriveMs,lastTick,zeroSince;
+ double distanceKm; int currentSpeed; boolean driving;
+ String driver="BRAK KARTY",driverId="---",plate="---",activity="ODPOCZYNEK";
+ @Override public void onCreate(Bundle b){super.onCreate(b);prefs=getSharedPreferences("tachograf",0);load();lastTick=System.currentTimeMillis();buildUi();IntentFilter f=new IntentFilter(ScreenCaptureService.ACTION_SPEED);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);if(Build.VERSION.SDK_INT>=33)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},55);new Handler(Looper.getMainLooper()).post(tick);}
+ TextView tv(String s,int z){TextView v=new TextView(this);v.setText(s);v.setTextColor(Color.rgb(220,255,160));v.setTextSize(z);v.setPadding(8,7,8,7);return v;} LinearLayout.LayoutParams lp(){return new LinearLayout.LayoutParams(-1,-2);} Button btn(String s){Button b=new Button(this);b.setText(s);return b;}
+ void buildUi(){ScrollView sc=new ScrollView(this);LinearLayout r=new LinearLayout(this);r.setOrientation(LinearLayout.VERTICAL);r.setPadding(12,12,12,24);r.setBackgroundColor(Color.rgb(8,9,10));TextView brand=tv("TACHOGRAF2 • v2.0",25);brand.setGravity(Gravity.CENTER);brand.setTypeface(null,1);r.addView(brand,lp());TextView sub=tv("DIGITALNY TACHOGRAF • TRUCKERS OF EUROPE 3",12);sub.setGravity(Gravity.CENTER);r.addView(sub,lp());display=tv("00:00\n0 km/h\nODPOCZYNEK",25);display.setGravity(Gravity.CENTER);display.setBackgroundColor(Color.rgb(24,29,24));display.setPadding(10,18,10,18);r.addView(display,lp());speed=tv("Prędkość: 0 km/h",18);r.addView(speed,lp());mode=tv("Aktywność: ODPOCZYNEK",17);r.addView(mode,lp());status=tv("● Odczyt ekranu: NIEAKTYWNY",13);r.addView(status,lp());ocr=tv("OCR: ---",11);r.addView(ocr,lp());captureBtn=btn("📡 START ODCZYTU EKRANU");captureBtn.setOnClickListener(v->startCapture());r.addView(captureBtn,lp());Button stop=btn("⏹ STOP ODCZYTU");stop.setOnClickListener(v->stopCapture());r.addView(stop,lp());
+  r.addView(tv("⚙️ AKTYWNOŚĆ TACHOGRAFU",17),lp());LinearLayout m=new LinearLayout(this);m.setOrientation(LinearLayout.HORIZONTAL);Button j=btn("🚛 JAZDA"),p=btn("🔧 PRACA"),d=btn("📦 DYSPOZYCJA"),o=btn("🛌 ODPOCZYNEK");m.addView(j,new LinearLayout.LayoutParams(0,-2,1));m.addView(p,new LinearLayout.LayoutParams(0,-2,1));m.addView(d,new LinearLayout.LayoutParams(0,-2,1));m.addView(o,new LinearLayout.LayoutParams(0,-2,1));r.addView(m,lp());j.setOnClickListener(v->setActivity("JAZDA"));p.setOnClickListener(v->setActivity("PRACA"));d.setOnClickListener(v->setActivity("DYSPOZYCJA"));o.setOnClickListener(v->setActivity("ODPOCZYNEK"));
+  r.addView(tv("💳 KARTA KIEROWCY",17),lp());cardInfo=tv("Kierowca: BRAK KARTY\nID: ---",14);r.addView(cardInfo,lp());LinearLayout cb=new LinearLayout(this);Button ins=btn("WŁÓŻ / ZMIEŃ KARTĘ"),rem=btn("WYJMIJ KARTĘ");cb.addView(ins,new LinearLayout.LayoutParams(0,-2,1));cb.addView(rem,new LinearLayout.LayoutParams(0,-2,1));r.addView(cb,lp());ins.setOnClickListener(v->cardDialog());rem.setOnClickListener(v->{driver="BRAK KARTY";driverId="---";updateCard();save();});
+  r.addView(tv("🚛 POJAZD / ZESTAW",17),lp());vehicleInfo=tv("Rejestracja: ---\nNumer zestawu: ---",14);r.addView(vehicleInfo,lp());Button veh=btn("USTAW POJAZD");veh.setOnClickListener(v->vehicleDialog());r.addView(veh,lp());
+  r.addView(tv("⏱ CZASY JAZDY I ODPOCZYNKU",17),lp());times=tv("",14);r.addView(times,lp());r.addView(tv("⚠️ KONTROLA LIMITÓW",17),lp());warning=tv("Brak aktywnych ostrzeżeń.",14);r.addView(warning,lp());r.addView(tv("📋 HISTORIA AKTYWNOŚCI",17),lp());activityLog=tv("Brak zapisanych zdarzeń.",13);r.addView(activityLog,lp());
+  Button print=btn("🧾 RAPORT / WYDRUK TACHOGRAFU");print.setOnClickListener(v->report());r.addView(print,lp());Button reset=btn("🔄 NOWA TRASA — WYZERUJ LICZNIKI");reset.setOnClickListener(v->resetRoute());r.addView(reset,lp());r.addView(tv("ℹ️ TRYB RP\nSymulator cyfrowego tachografu dla Truckers of Europe 3. Prędkość może być odczytywana z HUD przez przechwytywanie ekranu. Nie jest to certyfikowany tachograf drogowy.",12),lp());sc.addView(r);setContentView(sc);updateAll();}
+ void setActivity(String a){if(!activity.equals(a)){addLog("Zmiana aktywności: "+a);}activity=a;driving=a.equals("JAZDA");if(driving)zeroSince=0;mode.setText("Aktywność: "+a);save();}
+ void cardDialog(){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);EditText n=new EditText(this);n.setHint("Imię i nazwisko kierowcy");EditText id=new EditText(this);id.setHint("ID karty kierowcy");x.addView(n);x.addView(id);new AlertDialog.Builder(this).setTitle("💳 KARTA KIEROWCY").setView(x).setNegativeButton("ANULUJ",null).setPositiveButton("ZAPISZ",(a,w)->{driver=n.getText().toString().trim();driverId=id.getText().toString().trim();if(driver.isEmpty())driver="KIEROWCA";if(driverId.isEmpty())driverId="ID-001";updateCard();addLog("Włożono kartę kierowcy: "+driver);save();}).show();}
+ void vehicleDialog(){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);EditText p=new EditText(this);p.setHint("Numer rejestracyjny");EditText z=new EditText(this);z.setHint("Numer zestawu");x.addView(p);x.addView(z);new AlertDialog.Builder(this).setTitle("🚛 POJAZD").setView(x).setNegativeButton("ANULUJ",null).setPositiveButton("ZAPISZ",(a,w)->{plate=p.getText().toString().trim();if(plate.isEmpty())plate="---";String set=z.getText().toString().trim();vehicleInfo.setText("Rejestracja: "+plate+"\nNumer zestawu: "+(set.isEmpty()?"---":set));addLog("Ustawiono pojazd: "+plate);save();}).show();}
+ void updateCard(){cardInfo.setText("Kierowca: "+driver+"\nID: "+driverId);}
+ void startCapture(){MediaProjectionManager m=(MediaProjectionManager)getSystemService(MEDIA_PROJECTION_SERVICE);startActivityForResult(m.createScreenCaptureIntent(),CAPTURE);} void stopCapture(){stopService(new Intent(this,ScreenCaptureService.class));status.setText("● Odczyt ekranu: ZATRZYMANY");captureBtn.setText("📡 START ODCZYTU EKRANU");}
+ @Override protected void onActivityResult(int r,int c,Intent data){super.onActivityResult(r,c,data);if(r==CAPTURE&&c==RESULT_OK&&data!=null){Intent i=new Intent(this,ScreenCaptureService.class);i.putExtra("code",c);i.putExtra("data",data);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);status.setText("● Odczyt ekranu: AKTYWNY");captureBtn.setText("🟢 ODCZYT AKTYWNY");}}
+ final BroadcastReceiver receiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){currentSpeed=Math.max(0,i.getIntExtra("speed",0));speed.setText("Prędkość: "+currentSpeed+" km/h");ocr.setText("OCR: "+i.getStringExtra("text")+" • Pewność: "+i.getIntExtra("confidence",0)+"%");if(currentSpeed>0&&!driving)setActivity("JAZDA");else if(currentSpeed==0&&driving&&zeroSince==0)zeroSince=System.currentTimeMillis();}};
+ final Runnable tick=new Runnable(){public void run(){long now=System.currentTimeMillis(),dt=Math.max(0,now-lastTick);lastTick=now;if(driving&&currentSpeed==0&&zeroSince>0&&now-zeroSince>=2000)setActivity("ODPOCZYNEK");if(driving){driveMs+=dt;totalMs+=dt;todayDriveMs+=dt;weekDriveMs+=dt;twoWeekDriveMs+=dt;distanceKm+=(double)currentSpeed*dt/3600000.0;restMs=0;}else restMs+=dt;if(restMs>=45*60*1000L&&driveMs>0){driveMs=0;restMs=0;addLog("45 min przerwy — reset jazdy ciągłej");}updateAll();save();new Handler(Looper.getMainLooper()).postDelayed(this,500);}};
+ void updateAll(){if(times==null)return;display.setText(new java.text.SimpleDateFormat("HH:mm",Locale.getDefault()).format(new java.util.Date())+"\n"+currentSpeed+" km/h\n"+activity);times.setText("Jazda ciągła: "+fmt(driveMs)+" / 04:30:00\nPozostało do przerwy: "+fmt(Math.max(0,270*60*1000L-driveMs))+"\nJazda dzisiaj: "+fmt(todayDriveMs)+" / 09:00:00\nPrzerwa/odpoczynek: "+fmt(restMs)+"\nTydzień: "+fmt(weekDriveMs)+" / 56:00:00\n2 tygodnie: "+fmt(twoWeekDriveMs)+" / 90:00:00\nDystans: "+String.format(Locale.US,"%.2f km",distanceKm));StringBuilder w=new StringBuilder();if(driveMs>=270*60*1000L)w.append("🟥 PRZEKROCZONA JAZDA 4:30 — WYMAGANA PRZERWA 45 MIN\n");else if(driveMs>=255*60*1000L)w.append("🟨 ZBLIŻASZ SIĘ DO LIMITU 4:30\n");if(todayDriveMs>=9*3600000L)w.append("🟥 PRZEKROCZONA JAZDA DZIENNA 9 H\n");if(weekDriveMs>=56*3600000L)w.append("🟥 PRZEKROCZONY LIMIT TYGODNIOWY 56 H\n");if(twoWeekDriveMs>=90*3600000L)w.append("🟥 PRZEKROCZONY LIMIT 2 TYGODNI 90 H\n");warning.setText(w.length()==0?"🟢 Brak aktywnych ostrzeżeń.":w.toString());}
+ void addLog(String s){if(activityLog==null)return;String old=activityLog.getText().toString();String t=new java.text.SimpleDateFormat("HH:mm:ss",Locale.getDefault()).format(new java.util.Date());String n=t+" • "+s+"\n"+old;activityLog.setText(n.substring(0,Math.min(5000,n.length())));}
+ void report(){new AlertDialog.Builder(this).setTitle("🧾 WYDRUK TACHOGRAFU").setMessage("KIEROWCA: "+driver+"\nID: "+driverId+"\nPOJAZD: "+plate+"\n\nJAZDA DZISIAJ: "+fmt(todayDriveMs)+"\nJAZDA TYGODNIOWA: "+fmt(weekDriveMs)+"\nJAZDA 2 TYGODNIE: "+fmt(twoWeekDriveMs)+"\nDYSTANS: "+String.format(Locale.US,"%.2f km",distanceKm)+"\n\nAKTYWNOŚĆ: "+activity+"\n\nRaport symulatora RP.").setPositiveButton("OK",null).show();}
+ void resetRoute(){new AlertDialog.Builder(this).setTitle("🔄 NOWA TRASA").setMessage("Wyzerować czasy i dystans?").setNegativeButton("ANULUJ",null).setPositiveButton("WYZERUJ",(a,w)->{driveMs=totalMs=restMs=todayDriveMs=weekDriveMs=twoWeekDriveMs=0;distanceKm=0;currentSpeed=0;driving=false;activity="ODPOCZYNEK";lastTick=System.currentTimeMillis();addLog("Nowa trasa — wyzerowano liczniki");save();updateAll();Toast.makeText(this,"Nowa trasa — liczniki wyzerowane",Toast.LENGTH_SHORT).show();}).show();}
+ void save(){if(prefs==null)return;prefs.edit().putLong("drive",driveMs).putLong("total",totalMs).putLong("rest",restMs).putLong("today",todayDriveMs).putLong("week",weekDriveMs).putLong("two",twoWeekDriveMs).putFloat("dist",(float)distanceKm).putBoolean("driving",driving).putString("driver",driver).putString("driverId",driverId).putString("plate",plate).putString("activity",activity).apply();}
+ void load(){driveMs=prefs.getLong("drive",0);totalMs=prefs.getLong("total",0);restMs=prefs.getLong("rest",0);todayDriveMs=prefs.getLong("today",0);weekDriveMs=prefs.getLong("week",0);twoWeekDriveMs=prefs.getLong("two",0);distanceKm=prefs.getFloat("dist",0);driving=prefs.getBoolean("driving",false);driver=prefs.getString("driver","BRAK KARTY");driverId=prefs.getString("driverId","---");plate=prefs.getString("plate","---");activity=prefs.getString("activity",driving?"JAZDA":"ODPOCZYNEK");zeroSince=0;}
+ String fmt(long x){long s=x/1000,h=s/3600,m=s%3600/60,z=s%60;return String.format(Locale.US,"%02d:%02d:%02d",h,m,z);}
+ @Override protected void onPause(){save();super.onPause();}@Override protected void onStop(){save();super.onStop();}@Override protected void onDestroy(){save();try{unregisterReceiver(receiver);}catch(Exception e){}super.onDestroy();}
 }
