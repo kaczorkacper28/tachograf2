@@ -47,26 +47,30 @@ public class ScreenCaptureService extends Service {
 
     void process(ImageReader r,int sw,int sh){
         long now=System.currentTimeMillis(); if(busy||now-lastOcr<650)return;
-        Image im=null; Bitmap full=null; Bitmap crop=null;
+        Image im=null; Bitmap full=null; Bitmap crop=null; Bitmap input=null;
         try{
             im=r.acquireLatestImage(); if(im==null)return; busy=true; lastOcr=now;
             Image.Plane p=im.getPlanes()[0]; int ps=p.getPixelStride(),rs=p.getRowStride(),pad=rs-ps*sw;
             full=Bitmap.createBitmap(sw+pad/ps,sh,Bitmap.Config.ARGB_8888); full.copyPixelsFromBuffer(p.getBuffer());
             SharedPreferences sp=getSharedPreferences("tachograf",0);
-            int x=clamp(sp.getInt("x",25),0,99), y=clamp(sp.getInt("y",78),0,99), w=clamp(sp.getInt("w",50),1,100-x), h=clamp(sp.getInt("h",22),1,100-y);
+            // Domyślny obszar dopasowany do zrzutu użytkownika: prędkość znajduje się w dolnym-lewym HUD.
+            int x=clamp(sp.getInt("x",25),0,99), y=clamp(sp.getInt("y",87),0,99), w=clamp(sp.getInt("w",7),1,100-x), h=clamp(sp.getInt("h",9),1,100-y);
             int left=sw*x/100,top=sh*y/100,cw=Math.max(1,sw*w/100),ch=Math.max(1,sh*h/100);
             crop=Bitmap.createBitmap(full,left,top,Math.min(cw,full.getWidth()-left),Math.min(ch,full.getHeight()-top));
             full.recycle();full=null;
-            Bitmap input=crop;
-            recognizer.process(InputImage.fromBitmap(input,0)).addOnSuccessListener(result->{
+            // Powiększenie pomaga ML Kit rozpoznać małe cyfry prędkości z HUD-u mobilnej gry.
+            input=Bitmap.createScaledBitmap(crop,Math.max(1,crop.getWidth()*3),Math.max(1,crop.getHeight()*3),true);
+            crop.recycle();crop=null;
+            Bitmap ocrBitmap=input;
+            recognizer.process(InputImage.fromBitmap(ocrBitmap,0)).addOnSuccessListener(result->{
                 String raw=result.getText()==null?"":result.getText(); String txt=raw.replace('\n',' ').trim();
                 int speed=parseSpeed(raw); int conf=speed>=0?estimateConfidence(raw,speed):0; if(speed<0)speed=0;
                 Intent out=new Intent(ACTION_SPEED); out.setPackage(getPackageName()); out.putExtra("speed",speed); out.putExtra("text",txt); out.putExtra("confidence",conf); sendBroadcast(out);
                 getSharedPreferences("last",0).edit().putInt("speed",speed).putString("text",txt).putInt("confidence",conf).apply();
-                try{input.recycle();}catch(Exception ignored){} busy=false;
-            }).addOnFailureListener(e->{try{input.recycle();}catch(Exception ignored){}busy=false;});
-            crop=null;
-        }catch(Exception e){busy=false;}finally{if(crop!=null)try{crop.recycle();}catch(Exception ignored){}if(full!=null)try{full.recycle();}catch(Exception ignored){}if(im!=null)try{im.close();}catch(Exception ignored){}}
+                try{ocrBitmap.recycle();}catch(Exception ignored){} busy=false;
+            }).addOnFailureListener(e->{try{ocrBitmap.recycle();}catch(Exception ignored){}busy=false;});
+            input=null;
+        }catch(Exception e){busy=false;}finally{if(crop!=null)try{crop.recycle();}catch(Exception ignored){}if(input!=null)try{input.recycle();}catch(Exception ignored){}if(full!=null)try{full.recycle();}catch(Exception ignored){}if(im!=null)try{im.close();}catch(Exception ignored){}}
     }
 
     int parseSpeed(String s){
