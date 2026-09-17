@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Tachograf Cyfrowy RP — TOEU3</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101010;color:#d8ff9b;font-family:monospace;min-height:100vh}.app{width:min(430px,100%);margin:auto;padding:12px}h1{text-align:center;font-size:20px;margin:5px 0 4px}.sub{text-align:center;color:#999;font-size:11px;margin-bottom:10px}.screen{background:#263322;border:5px solid #555;border-radius:8px;padding:12px;box-shadow:inset 0 0 25px #000}.top{display:flex;justify-content:space-between;font-size:13px}.main{font-size:40px;text-align:center;margin:16px 0 4px}.label{text-align:center;font-size:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:15px}.box{border:1px solid #79965c;padding:7px}.box b{display:block;font-size:17px;margin-top:4px}.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}button{border:2px solid #777;background:#292929;color:white;padding:12px 6px;border-radius:7px;font-weight:bold;font-family:inherit}button.active{background:#526f35;color:#d8ff9b;border-color:#9bc66b}.card,.info,.history,.game{background:#1c1c1c;border:1px solid #444;border-radius:7px;padding:10px;margin-top:10px}.row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #333}.row:last-child{border:0}.ok{color:#9cff76}.danger{color:#ff6868}.warn{color:#ffd05a}.muted{color:#999}.game h3{margin:0 0 8px}.gameGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}input,select{width:100%;padding:11px;background:#111;border:1px solid #777;color:white;border-radius:5px;margin:4px 0 8px;font-family:inherit}label{font-size:12px;color:#bbb}.modal{display:none;position:fixed;inset:0;background:#000c;align-items:center;justify-content:center;padding:20px}.modal>div{background:#222;border:2px solid #777;border-radius:8px;padding:16px;width:100%;max-width:390px}.receipt{white-space:pre-wrap;background:#080808;color:#eee;padding:12px;border-radius:5px;font-size:12px;margin-top:8px}.small{font-size:11px;color:#aaa;line-height:1.4}.dangerBtn{border-color:#a44;color:#ff8b8b}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>🚛 TACHOGRAF CYFROWY</h1>
+<div class="sub">TRYB: TRUCKERS OF EUROPE 3 • SYMULATOR RP</div>
+<div class="screen">
+<div class="top"><span id="date">--.--.----</span><span id="clock">--:--:--</span></div>
+<div class="main" id="speed">0 km/h</div>
+<div class="label" id="mode">🛏 ODPOCZYNEK</div>
+<div class="grid">
+<div class="box">Jazda od przerwy<b id="drive">00:00:00</b></div>
+<div class="box">Łączna jazda<b id="total">00:00:00</b></div>
+<div class="box">Do przerwy<b id="break">04:30:00</b></div>
+<div class="box">Dystans<b id="distance">0.0 km</b></div>
+</div>
+</div>
+<div class="controls">
+<button id="bdrive" onclick="setMode('drive')">🚗 JAZDA</button>
+<button id="bwork" onclick="setMode('work')">🔧 PRACA</button>
+<button id="bready" onclick="setMode('ready')">⏳ DYSPOZYCYJNOŚĆ</button>
+<button id="brest" class="active" onclick="setMode('rest')">🛏 ODPOCZYNEK</button>
+</div>
+<div class="game">
+<h3>🎮 TRUCKERS OF EUROPE 3</h3>
+<div class="small">TOEU3 nie udostępnia obecnie publicznego interfejsu telemetrycznego, więc tachograf działa jako bezpieczny tryb towarzyszący: dane z jazdy wpisujesz tutaj, a czas jazdy i dystans są liczone automatycznie.</div>
+<label>Prędkość z gry (km/h)</label>
+<input id="gameSpeed" type="number" min="0" max="200" value="0" inputmode="numeric" oninput="updateGameSpeed()">
+<div class="gameGrid">
+<button onclick="addDistance(1)">+1 km</button>
+<button onclick="addDistance(10)">+10 km</button>
+<button onclick="addDistance(50)">+50 km</button>
+<button onclick="setGameSpeed(0)">🛑 0 km/h</button>
+</div>
+</div>
+<div class="card">
+<div class="row"><span>Karta kierowcy</span><b id="cardState" class="danger">BRAK</b></div>
+<div class="row"><span>ID kierowcy</span><span id="driverId">---</span></div>
+<div class="row"><span>Kierowca</span><span id="driverName">---</span></div>
+<button onclick="openCard()" style="width:100%;margin-top:8px">💳 KARTA KIEROWCY</button>
+</div>
+<div class="info">
+<div class="row"><span>Limit jazdy dziennej</span><span>09:00</span></div>
+<div class="row"><span>Wydłużenie</span><span>10:00</span></div>
+<div class="row"><span>Limit tygodniowy</span><span>56:00</span></div>
+<div class="row"><span>Limit 2 tygodni</span><span>90:00</span></div>
+</div>
+<div class="history">
+<b>📋 AKTYWNOŚCI</b><div id="historyList"><div class="muted">Brak zapisów.</div></div>
+<button onclick="showReport()" style="width:100%;margin-top:8px">🧾 WYDRUK / RAPORT TOEU3</button>
+<button onclick="resetTrip()" class="dangerBtn" style="width:100%;margin-top:7px">♻️ NOWA ZMIANA</button>
+<div id="receipt"></div>
+</div>
+</div>
+<div class="modal" id="modal"><div>
+<h3>💳 KARTA KIEROWCY</h3>
+<label>Imię i nazwisko</label><input id="nameInput" placeholder="np. Jan Kowalski">
+<label>ID karty</label><input id="idInput" placeholder="np. PL-DRV-001">
+<button onclick="insertCard()" style="width:100%">WŁÓŻ KARTĘ</button>
+<button onclick="closeCard()" style="width:100%;margin-top:7px">ANULUJ</button>
+</div></div>
+<script>
+const modes={drive:'🚗 JAZDA',work:'🔧 PRACA',ready:'⏳ DYSPOZYCYJNOŚĆ',rest:'🛏 ODPOCZYNEK'};
+let mode='rest',card=null,last=Date.now(),driveMs=0,totalMs=0,distance=0,history=[],gameSpeed=0;
+function fmt(ms){let s=Math.floor(ms/1000),h=Math.floor(s/3600);s%=3600;let m=Math.floor(s/60);s%=60;return [h,m,s].map(x=>String(x).padStart(2,'0')).join(':')}
+function setMode(m){if(mode!==m&&card)history.unshift({t:new Date().toLocaleTimeString('pl-PL'),m:modes[m]});mode=m;document.querySelectorAll('.controls button').forEach(x=>x.classList.remove('active'));document.getElementById('b'+m).classList.add('active');document.getElementById('mode').textContent=modes[m];renderHistory()}
+function openCard(){document.getElementById('modal').style.display='flex'}function closeCard(){document.getElementById('modal').style.display='none'}
+function insertCard(){let n=document.getElementById('nameInput').value.trim(),id=document.getElementById('idInput').value.trim();if(!n||!id)return alert('Uzupełnij dane karty.');card={n,id};driverName.textContent=n;driverId.textContent=id;cardState.textContent='WŁOŻONA';cardState.className='ok';closeCard()}
+function updateGameSpeed(){let v=Number(document.getElementById('gameSpeed').value);gameSpeed=Math.max(0,Math.min(200,isNaN(v)?0:v));document.getElementById('gameSpeed').value=gameSpeed}
+function setGameSpeed(v){gameSpeed=v;document.getElementById('gameSpeed').value=v}
+function addDistance(km){distance+=km;render()}
+function renderHistory(){historyList.innerHTML=history.slice(0,10).map(x=>`<div class="row"><span>${x.t}</span><span>${x.m}</span></div>`).join('')||'<div class="muted">Brak zapisów.</div>'}
+function showReport(){if(!card)return alert('Najpierw włóż kartę kierowcy.');receipt.innerHTML='<div class="receipt">TACHOGRAF CYFROWY — TOEU3\n-------------------------\nKIEROWCA: '+card.n+'\nID KARTY: '+card.id+'\nDATA: '+new Date().toLocaleDateString('pl-PL')+'\n\nŁĄCZNA JAZDA: '+fmt(totalMs)+'\nJAZDA OD PRZERWY: '+fmt(driveMs)+'\nDYSTANS: '+distance.toFixed(1)+' km\nPRĘDKOŚĆ: '+gameSpeed+' km/h\nAKTYWNOŚĆ: '+modes[mode]+'\n\nTRYB TOEU3 — SYMULATOR RP</div>'}
+function resetTrip(){if(!confirm('Rozpocząć nową zmianę? Dane bieżącej zmiany zostaną wyzerowane.'))return;driveMs=0;totalMs=0;distance=0;history=[];receipt.innerHTML='';setMode('rest');render()}
+function render(){drive.textContent=fmt(driveMs);total.textContent=fmt(totalMs);document.getElementById('distance').textContent=distance.toFixed(1)+' km';document.getElementById('speed').textContent=(mode==='drive'&&card?gameSpeed:0)+' km/h';let remain=Math.max(0,16200000-driveMs);document.getElementById('break').textContent=fmt(remain);document.getElementById('break').className=remain===0?'danger':remain<1800000?'warn':''}
+function tick(){let now=Date.now(),dt=now-last;last=now;if(mode==='drive'&&card){driveMs+=dt;totalMs+=dt;if(gameSpeed>0)distance+=(gameSpeed*dt/3600000)}let d=new Date();clock.textContent=d.toLocaleTimeString('pl-PL');date.textContent=d.toLocaleDateString('pl-PL');render()}
+setInterval(tick,1000);tick();
+</script>
+</body>
+</html>
