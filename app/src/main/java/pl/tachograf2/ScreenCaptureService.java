@@ -56,22 +56,18 @@ public class ScreenCaptureService extends Service {
 
             SharedPreferences sp=getSharedPreferences("tachograf",0);
             int x=clamp(sp.getInt("x",0),0,99);
-            int y=clamp(sp.getInt("y",80),0,99);
-            int w=clamp(sp.getInt("w",35),1,100-x);
-            int h=clamp(sp.getInt("h",20),1,100-y);
+            int y=clamp(sp.getInt("y",78),0,99);
+            int w=clamp(sp.getInt("w",50),1,100-x);
+            int h=clamp(sp.getInt("h",22),1,100-y);
 
             int left=sw*x/100,top=sh*y/100;
             int cw=Math.max(1,sw*w/100),ch=Math.max(1,sh*h/100);
             cw=Math.min(cw,full.getWidth()-left); ch=Math.min(ch,full.getHeight()-top);
             Bitmap crop=Bitmap.createBitmap(full,left,top,cw,ch);
             full.recycle();full=null;
+            Bitmap input=prepareForOcr(crop); crop.recycle();
 
-            // OCR dostaje powiększony, kontrastowy obraz HUD-u. Bierzemy kilka wariantów,
-            // ponieważ TOEU3 może renderować cyfry inaczej zależnie od rozdzielczości/UI.
-            Bitmap input=prepareForOcr(crop);
-            crop.recycle();
-            Bitmap ocrBitmap=input;
-            recognizer.process(InputImage.fromBitmap(ocrBitmap,0)).addOnSuccessListener(result->{
+            recognizer.process(InputImage.fromBitmap(input,0)).addOnSuccessListener(result->{
                 String raw=result.getText()==null?"":result.getText();
                 String txt=raw.replace('\n',' ').trim();
                 int speed=parseSpeed(raw);
@@ -81,8 +77,8 @@ public class ScreenCaptureService extends Service {
                 Intent out=new Intent(ACTION_SPEED); out.setPackage(getPackageName());
                 out.putExtra("speed",speed); out.putExtra("text",txt); out.putExtra("confidence",conf); sendBroadcast(out);
                 getSharedPreferences("last",0).edit().putInt("speed",speed).putString("text",txt).putInt("confidence",conf).apply();
-                try{ocrBitmap.recycle();}catch(Exception ignored){} busy=false;
-            }).addOnFailureListener(e->{try{ocrBitmap.recycle();}catch(Exception ignored){}busy=false;});
+                try{input.recycle();}catch(Exception ignored){} busy=false;
+            }).addOnFailureListener(e->{try{input.recycle();}catch(Exception ignored){}busy=false;});
         }catch(Exception e){busy=false;}
         finally{
             if(im!=null)try{im.close();}catch(Exception ignored){}
@@ -91,14 +87,14 @@ public class ScreenCaptureService extends Service {
     }
 
     Bitmap prepareForOcr(Bitmap src){
-        int w=Math.max(1,src.getWidth()*4), h=Math.max(1,src.getHeight()*4);
+        int w=Math.max(1,src.getWidth()*5), h=Math.max(1,src.getHeight()*5);
         Bitmap scaled=Bitmap.createScaledBitmap(src,w,h,true);
         Bitmap out=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
         Canvas canvas=new Canvas(out);
         Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
         ColorMatrix cm=new ColorMatrix();
         cm.setSaturation(0f);
-        float[] m={1.7f,0,0,-80, 0,1.7f,0,-80, 0,0,1.7f,-80, 0,0,0,1};
+        float[] m={2.0f,0,0,-100, 0,2.0f,0,-100, 0,0,2.0f,-100, 0,0,0,1};
         cm.set(m);
         paint.setColorFilter(new ColorMatrixColorFilter(cm));
         canvas.drawBitmap(scaled,0,0,paint);
@@ -108,10 +104,10 @@ public class ScreenCaptureService extends Service {
 
     int parseSpeed(String s){
         if(s==null)return -1;
-        String normalized=s.toLowerCase().replaceAll("[|]","1");
+        String normalized=s.toLowerCase().replaceAll("[|]","1").replaceAll("[oO]","0");
         int best=-1;
 
-        // 1. Liczba przy km/h — najwyższy priorytet.
+        // Najpierw szukamy wartości bezpośrednio związanej z km/h.
         Matcher km=Pattern.compile("(?<!\\d)(\\d{1,3})\\s*(?:km\\s*/?\\s*h|kmh|k[mn]\\s*/?\\s*h)(?!\\w)").matcher(normalized);
         while(km.find()){
             int n=safe(km.group(1));
@@ -119,13 +115,13 @@ public class ScreenCaptureService extends Service {
         }
         if(best>=0)return best;
 
-        // 2. Typowe formaty cyfrowego HUD-u, np. "072", "72" lub "72 km".
+        // TOEU3 często pokazuje samą liczbę, np. 50, 72 albo 090.
         Matcher m=Pattern.compile("(?<!\\d)(\\d{1,3})(?!\\d)").matcher(normalized);
         while(m.find()){
-            int n=safe(m.group(1));
+            String g=m.group(1);
+            int n=safe(g);
             if(n>=0&&n<=160){
-                // Odrzucamy pojedyncze cyfry, które często są elementem innych HUD-ów.
-                if(n>=10 || best<0)best=Math.max(best,n);
+                if(g.length()>=2 || n>=10)best=Math.max(best,n);
             }
         }
         return best;
@@ -134,8 +130,8 @@ public class ScreenCaptureService extends Service {
     int estimateConfidence(String s,int speed){
         String n=s.toLowerCase();
         if(n.matches(".*\\b"+speed+"\\s*(km\\s*/?\\s*h|kmh)\\b.*"))return 99;
-        if(n.matches(".*\\b0*"+speed+"\\b.*"))return 90;
-        return 78;
+        if(n.matches(".*\\b0*"+speed+"\\b.*"))return 94;
+        return 82;
     }
     int safe(String s){try{return Integer.parseInt(s);}catch(Exception e){return -1;}}
     int clamp(int v,int a,int b){return Math.max(a,Math.min(b,v));}
