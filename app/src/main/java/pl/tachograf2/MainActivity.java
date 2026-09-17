@@ -40,13 +40,14 @@ public class MainActivity extends Activity {
         Button drive=new Button(this); drive.setText("🚗 JAZDA"); Button rest=new Button(this); rest.setText("🛏 ODPOCZYNEK");
         modes.addView(drive,new LinearLayout.LayoutParams(0,-2,1)); modes.addView(rest,new LinearLayout.LayoutParams(0,-2,1)); root.addView(modes,lp());
         drive.setOnClickListener(v->{driving=true;mode.setText("🚗 JAZDA");}); rest.setOnClickListener(v->{driving=false;mode.setText("🛏 ODPOCZYNEK");});
-        TextView info=t("\n📱 JAK TO DZIAŁA\nMediaProjection przechwytuje obraz ekranu po zgodzie Androida. OCR analizuje obszar HUD-u TOEU3 i szuka prędkości przy oznaczeniu km/h. Aplikacja działa jako usługa pierwszego planu, więc możesz wrócić do gry.\n\n⚠️ To symulator RP — nie jest certyfikowanym tachografem.",13); root.addView(info,lp());
-        TextView cropTitle=t("\n🎯 OBSZAR HUD-U TOEU3",16); root.addView(cropTitle,lp());
+        TextView info=t("\n📱 JAK TO DZIAŁA\nMediaProjection przechwytuje obraz ekranu po zgodzie Androida. OCR analizuje dokładnie dolny lewy HUD-u TOEU3 i szuka prędkości przy oznaczeniu km/h. Aplikacja działa jako usługa pierwszego planu, więc możesz wrócić do gry.\n\n⚠️ To symulator RP — nie jest certyfikowanym tachografem.",13); root.addView(info,lp());
+        TextView cropTitle=t("\n🎯 OBSZAR HUD-U TOEU3 — PRĘDKOŚĆ",16); root.addView(cropTitle,lp());
+        TextView cropHint=t("Dla HUD-u z Twojego zrzutu ustawienia startowe to: X 25%, Y 87%, szerokość 7%, wysokość 9%.",12); root.addView(cropHint,lp());
         LinearLayout crop=new LinearLayout(this); crop.setOrientation(LinearLayout.VERTICAL);
-        EditText x=field("X %",prefs.getInt("x",25)); EditText y=field("Y %",prefs.getInt("y",78)); EditText w=field("Szerokość %",prefs.getInt("w",50)); EditText h=field("Wysokość %",prefs.getInt("h",22));
+        EditText x=field("X %",prefs.getInt("x",25)); EditText y=field("Y %",prefs.getInt("y",87)); EditText w=field("Szerokość %",prefs.getInt("w",7)); EditText h=field("Wysokość %",prefs.getInt("h",9));
         crop.addView(x);crop.addView(y);crop.addView(w);crop.addView(h); root.addView(crop,lp());
-        Button save=new Button(this); save.setText("💾 ZAPISZ OBSZAR HUD"); save.setOnClickListener(v->{prefs.edit().putInt("x",num(x,25)).putInt("y",num(y,78)).putInt("w",num(w,50)).putInt("h",num(h,22)).apply(); Toast.makeText(this,"Obszar HUD zapisany",Toast.LENGTH_SHORT).show();}); root.addView(save,lp());
-        Button defaults=new Button(this); defaults.setText("🎯 DOMYŚLNY OBSZAR TOEU3"); defaults.setOnClickListener(v->{x.setText("25");y.setText("78");w.setText("50");h.setText("22");}); root.addView(defaults,lp());
+        Button save=new Button(this); save.setText("💾 ZAPISZ OBSZAR HUD"); save.setOnClickListener(v->{prefs.edit().putInt("x",num(x,25)).putInt("y",num(y,87)).putInt("w",num(w,7)).putInt("h",num(h,9)).apply(); Toast.makeText(this,"Obszar HUD zapisany",Toast.LENGTH_SHORT).show();}); root.addView(save,lp());
+        Button defaults=new Button(this); defaults.setText("🎯 DOMYŚLNY OBSZAR — TEN HUD"); defaults.setOnClickListener(v->{x.setText("25");y.setText("87");w.setText("7");h.setText("9");}); root.addView(defaults,lp());
         times=t("Jazda od pauzy: 00:00:00\nŁączna jazda: 00:00:00\nDystans: 0.0 km",14); times.setPadding(4,20,4,4); root.addView(times,lp());
         scroll.addView(root); setContentView(scroll);
     }
