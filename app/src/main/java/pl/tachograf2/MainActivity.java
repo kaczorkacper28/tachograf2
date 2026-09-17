@@ -15,6 +15,9 @@ public class MainActivity extends Activity {
     TextView speed,status,ocr,mode,times;
     Button captureBtn;
     long driveMs=0,totalMs=0,restMs=0,lastTick=System.currentTimeMillis();
+    long zeroSince=0;
+    double distanceKm=0.0;
+    int currentSpeed=0;
     boolean driving=false;
     SharedPreferences prefs;
 
@@ -30,7 +33,7 @@ public class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(18,18,18,24); root.setBackgroundColor(Color.rgb(9,10,11));
         TextView title=t("🚛 TACHOGRAF CYFROWY",23); title.setGravity(Gravity.CENTER); root.addView(title,lp());
-        TextView sub=t("TRUCKERS OF EUROPE 3 • APK • MEDIA PROJECTION + OCR",11); sub.setGravity(Gravity.CENTER); root.addView(sub,lp());
+        TextView sub=t("TRUCKERS OF EUROPE 3 • APK • AUTOMATYCZNA JAZDA Z HUD",11); sub.setGravity(Gravity.CENTER); root.addView(sub,lp());
         speed=t("0 km/h",44); speed.setGravity(Gravity.CENTER); speed.setPadding(0,28,0,10); root.addView(speed,lp());
         mode=t("🛏 ODPOCZYNEK",16); mode.setGravity(Gravity.CENTER); root.addView(mode,lp());
         status=t("Status: NIEPOŁĄCZONY",14); ocr=t("OCR: ---",12); root.addView(status,lp()); root.addView(ocr,lp());
@@ -39,8 +42,8 @@ public class MainActivity extends Activity {
         LinearLayout modes=new LinearLayout(this); modes.setOrientation(LinearLayout.HORIZONTAL);
         Button drive=new Button(this); drive.setText("🚗 JAZDA"); Button rest=new Button(this); rest.setText("🛏 ODPOCZYNEK");
         modes.addView(drive,new LinearLayout.LayoutParams(0,-2,1)); modes.addView(rest,new LinearLayout.LayoutParams(0,-2,1)); root.addView(modes,lp());
-        drive.setOnClickListener(v->{driving=true;mode.setText("🚗 JAZDA");}); rest.setOnClickListener(v->{driving=false;mode.setText("🛏 ODPOCZYNEK");});
-        TextView info=t("\n📱 JAK TO DZIAŁA\nMediaProjection przechwytuje obraz ekranu po zgodzie Androida. OCR analizuje dokładnie dolny lewy HUD-u TOEU3 i szuka prędkości przy oznaczeniu km/h. Aplikacja działa jako usługa pierwszego planu, więc możesz wrócić do gry.\n\n⚠️ To symulator RP — nie jest certyfikowanym tachografem.",13); root.addView(info,lp());
+        drive.setOnClickListener(v->{driving=true;zeroSince=0;mode.setText("🚗 JAZDA");}); rest.setOnClickListener(v->{driving=false;currentSpeed=0;zeroSince=0;mode.setText("🛏 ODPOCZYNEK");});
+        TextView info=t("\n📱 AUTOMATYCZNA JAZDA\nPo uruchomieniu odczytu aplikacja czyta prędkość z dolnego lewego HUD-u TOEU3. Gdy pojazd ruszy (prędkość > 0), tachograf automatycznie rozpoczyna liczenie czasu jazdy. Gdy zatrzymasz pojazd (0 km/h), czas jazdy zatrzymuje się i zaczyna się przerwa. Dystans jest liczony z odczytanej prędkości.\n\n⚠️ To symulator RP — nie jest certyfikowanym tachografem.",13); root.addView(info,lp());
         TextView cropTitle=t("\n🎯 OBSZAR HUD-U TOEU3 — PRĘDKOŚĆ",16); root.addView(cropTitle,lp());
         TextView cropHint=t("Dla HUD-u z Twojego zrzutu ustawienia startowe to: X 25%, Y 87%, szerokość 7%, wysokość 9%.",12); root.addView(cropHint,lp());
         LinearLayout crop=new LinearLayout(this); crop.setOrientation(LinearLayout.VERTICAL);
@@ -48,7 +51,7 @@ public class MainActivity extends Activity {
         crop.addView(x);crop.addView(y);crop.addView(w);crop.addView(h); root.addView(crop,lp());
         Button save=new Button(this); save.setText("💾 ZAPISZ OBSZAR HUD"); save.setOnClickListener(v->{prefs.edit().putInt("x",num(x,25)).putInt("y",num(y,87)).putInt("w",num(w,7)).putInt("h",num(h,9)).apply(); Toast.makeText(this,"Obszar HUD zapisany",Toast.LENGTH_SHORT).show();}); root.addView(save,lp());
         Button defaults=new Button(this); defaults.setText("🎯 DOMYŚLNY OBSZAR — TEN HUD"); defaults.setOnClickListener(v->{x.setText("25");y.setText("87");w.setText("7");h.setText("9");}); root.addView(defaults,lp());
-        times=t("Jazda od pauzy: 00:00:00\nŁączna jazda: 00:00:00\nDystans: 0.0 km",14); times.setPadding(4,20,4,4); root.addView(times,lp());
+        times=t("Jazda od pauzy: 00:00:00\nŁączna jazda: 00:00:00\nPrzerwa: 00:00:00\nDystans: 0.00 km",14); times.setPadding(4,20,4,4); root.addView(times,lp());
         scroll.addView(root); setContentView(scroll);
     }
     LinearLayout.LayoutParams lp(){return new LinearLayout.LayoutParams(-1,-2);}
@@ -58,8 +61,61 @@ public class MainActivity extends Activity {
     void startCapture(){MediaProjectionManager m=(MediaProjectionManager)getSystemService(MEDIA_PROJECTION_SERVICE);startActivityForResult(m.createScreenCaptureIntent(),CAPTURE);}
     void stopCapture(){stopService(new Intent(this,ScreenCaptureService.class));status.setText("Status: ZATRZYMANY");captureBtn.setText("📡 URUCHOM AUTOMATYCZNY ODCZYT");}
     @Override protected void onActivityResult(int r,int c,Intent data){super.onActivityResult(r,c,data);if(r==CAPTURE&&c==RESULT_OK&&data!=null){Intent i=new Intent(this,ScreenCaptureService.class);i.putExtra("code",c);i.putExtra("data",data);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);status.setText("Status: ODCZYT AKTYWNY");captureBtn.setText("🟢 ODCZYT AKTYWNY");}}
-    final BroadcastReceiver receiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){int s=i.getIntExtra("speed",0);String text=i.getStringExtra("text");int conf=i.getIntExtra("confidence",0);speed.setText(s+" km/h");ocr.setText("OCR: "+(text==null?"---":text)+" • Pewność: "+conf+"%");if(s>0&&!driving){driving=true;mode.setText("🚗 JAZDA");}}};
-    final Runnable tick=new Runnable(){public void run(){long now=System.currentTimeMillis(),d=Math.max(0,now-lastTick);lastTick=now;if(driving){driveMs+=d;totalMs+=d;restMs=0;}else{restMs+=d;if(restMs>=45*60*1000L&&driveMs>0)driveMs=0;}times.setText("Jazda od pauzy: "+fmt(driveMs)+"\nŁączna jazda: "+fmt(totalMs)+"\nDystans: naliczany na podstawie odczytanej prędkości\n\n⚠️ Limit ciągłej jazdy: 4:30 — symulator RP");new Handler(Looper.getMainLooper()).postDelayed(this,500);}};
+
+    final BroadcastReceiver receiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
+        int s=i.getIntExtra("speed",0); String text=i.getStringExtra("text"); int conf=i.getIntExtra("confidence",0);
+        currentSpeed=Math.max(0,s);
+        speed.setText(currentSpeed+" km/h");
+        ocr.setText("OCR: "+(text==null?"---":text)+" • Pewność: "+conf+"%");
+
+        // Automatyczny start jazdy natychmiast po ruszeniu pojazdem.
+        if(currentSpeed>0){
+            zeroSince=0;
+            if(!driving){
+                driving=true;
+                mode.setText("🚗 JAZDA");
+            }
+        } else if(driving){
+            // Krótkie opóźnienie chroni przed przypadkowym zerem OCR.
+            if(zeroSince==0) zeroSince=System.currentTimeMillis();
+        }
+    }};
+
+    final Runnable tick=new Runnable(){public void run(){
+        long now=System.currentTimeMillis();
+        long d=Math.max(0,now-lastTick);
+        lastTick=now;
+
+        // Jeżeli OCR pokazuje 0 przez co najmniej 2 sekundy, uznajemy pojazd za zatrzymany.
+        if(driving && currentSpeed==0 && zeroSince>0 && now-zeroSince>=2000){
+            driving=false;
+            mode.setText("🛏 ODPOCZYNEK");
+        }
+
+        if(driving){
+            driveMs+=d;
+            totalMs+=d;
+            restMs=0;
+
+            // Dystans = prędkość [km/h] × czas [h].
+            distanceKm += ((double)currentSpeed * d) / 3600000.0;
+        } else {
+            restMs+=d;
+            if(restMs>=45*60*1000L && driveMs>0){
+                driveMs=0;
+                restMs=0;
+            }
+        }
+
+        times.setText("Jazda od pauzy: "+fmt(driveMs)+
+                "\nŁączna jazda: "+fmt(totalMs)+
+                "\nPrzerwa: "+fmt(restMs)+
+                "\nDystans: "+String.format(Locale.US,"%.2f km",distanceKm)+
+                "\n\n⚠️ Limit ciągłej jazdy: 4:30 — symulator RP");
+
+        new Handler(Looper.getMainLooper()).postDelayed(this,500);
+    }};
+
     String fmt(long x){long s=x/1000,h=s/3600,m=(s%3600)/60,z=s%60;return String.format(Locale.US,"%02d:%02d:%02d",h,m,z);}
     @Override protected void onDestroy(){try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onDestroy();}
 }
