@@ -48,6 +48,12 @@ public class MainActivity extends Activity {
         modes.addView(drive,new LinearLayout.LayoutParams(0,-2,1)); modes.addView(rest,new LinearLayout.LayoutParams(0,-2,1)); root.addView(modes,lp());
         drive.setOnClickListener(v->{driving=true;zeroSince=0;mode.setText("🚗 JAZDA");saveState();});
         rest.setOnClickListener(v->{driving=false;currentSpeed=0;zeroSince=0;mode.setText("🛏 ODPOCZYNEK");saveState();});
+
+        Button newRoute=new Button(this);
+        newRoute.setText("🔄 NOWA TRASA");
+        newRoute.setOnClickListener(v->resetRoute());
+        root.addView(newRoute,lp());
+
         TextView info=t("\n📱 AUTOMATYCZNA JAZDA\nPo uruchomieniu odczytu aplikacja czyta prędkość z dolnego lewego HUD-u TOEU3. Gdy pojazd ruszy (prędkość > 0), tachograf automatycznie rozpoczyna liczenie czasu jazdy. Gdy zatrzymasz pojazd (0 km/h), czas jazdy zatrzymuje się i zaczyna się przerwa. Dystans jest liczony z odczytanej prędkości.\n\n💾 DANE SĄ ZAPISYWANE AUTOMATYCZNIE — po zamknięciu i ponownym uruchomieniu aplikacji dystans oraz czasy zostają zachowane.\n\n⚠️ To symulator RP — nie jest certyfikowanym tachografem.",13); root.addView(info,lp());
         TextView cropTitle=t("\n🎯 OBSZAR HUD-U TOEU3 — PRĘDKOŚĆ",16); root.addView(cropTitle,lp());
         TextView cropHint=t("Dla HUD-u z Twojego zrzutu ustawienia startowe to: X 25%, Y 87%, szerokość 7%, wysokość 9%.",12); root.addView(cropHint,lp());
@@ -120,6 +126,29 @@ public class MainActivity extends Activity {
                 "\nPrzerwa: "+fmt(restMs)+
                 "\nDystans: "+String.format(Locale.US,"%.2f km",distanceKm)+
                 "\n\n💾 Dane zapisane w pamięci telefonu\n⚠️ Limit ciągłej jazdy: 4:30 — symulator RP");
+    }
+
+    void resetRoute(){
+        new AlertDialog.Builder(this)
+                .setTitle("🔄 NOWA TRASA")
+                .setMessage("Wyzerować dystans oraz wszystkie czasy jazdy dla bieżącej trasy?")
+                .setNegativeButton("ANULUJ", null)
+                .setPositiveButton("WYZERUJ", (dialog, which) -> {
+                    driveMs=0;
+                    totalMs=0;
+                    restMs=0;
+                    distanceKm=0.0;
+                    currentSpeed=0;
+                    zeroSince=0;
+                    driving=false;
+                    lastTick=System.currentTimeMillis();
+                    mode.setText("🛏 ODPOCZYNEK");
+                    speed.setText("0 km/h");
+                    updateTimes();
+                    saveState();
+                    Toast.makeText(this,"Nowa trasa rozpoczęta — liczniki wyzerowane",Toast.LENGTH_SHORT).show();
+                })
+                .show();
     }
 
     void saveState(){
