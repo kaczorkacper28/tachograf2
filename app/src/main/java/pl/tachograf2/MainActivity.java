@@ -57,12 +57,12 @@ public class MainActivity extends Activity {
 
         TextView info=t("\n📱 AUTOMATYCZNA JAZDA\nPo uruchomieniu odczytu aplikacja czyta prędkość z dolnego lewego HUD-u TOEU3. Gdy pojazd ruszy (prędkość > 0), tachograf automatycznie rozpoczyna liczenie czasu jazdy. Gdy zatrzymasz pojazd (0 km/h), czas jazdy zatrzymuje się i zaczyna się przerwa. Dystans jest liczony z odczytanej prędkości.\n\n💾 DANE SĄ ZAPISYWANE AUTOMATYCZNIE — po zamknięciu i ponownym uruchomieniu aplikacji dystans oraz czasy zostają zachowane.\n\n⚠️ To symulator RP — nie jest certyfikowanym tachografem.",13); root.addView(info,lp());
         TextView cropTitle=t("\n🎯 OBSZAR HUD-U TOEU3 — PRĘDKOŚĆ",16); root.addView(cropTitle,lp());
-        TextView cropHint=t("Dla HUD-u z Twojego zrzutu ustawienia startowe to: X 25%, Y 87%, szerokość 7%, wysokość 9%.",12); root.addView(cropHint,lp());
+        TextView cropHint=t("Poprawione ustawienia startowe dla prędkości z dolnego-lewego HUD-u: X 0%, Y 80%, szerokość 35%, wysokość 20%. Jeśli HUD jest w innym miejscu, możesz je zmienić.",12); root.addView(cropHint,lp());
         LinearLayout crop=new LinearLayout(this); crop.setOrientation(LinearLayout.VERTICAL);
-        EditText x=field("X %",prefs.getInt("x",25)); EditText y=field("Y %",prefs.getInt("y",87)); EditText w=field("Szerokość %",prefs.getInt("w",7)); EditText h=field("Wysokość %",prefs.getInt("h",9));
+        EditText x=field("X %",prefs.getInt("x",0)); EditText y=field("Y %",prefs.getInt("y",80)); EditText w=field("Szerokość %",prefs.getInt("w",35)); EditText h=field("Wysokość %",prefs.getInt("h",20));
         crop.addView(x);crop.addView(y);crop.addView(w);crop.addView(h); root.addView(crop,lp());
-        Button save=new Button(this); save.setText("💾 ZAPISZ OBSZAR HUD"); save.setOnClickListener(v->{prefs.edit().putInt("x",num(x,25)).putInt("y",num(y,87)).putInt("w",num(w,7)).putInt("h",num(h,9)).apply(); Toast.makeText(this,"Obszar HUD zapisany",Toast.LENGTH_SHORT).show();}); root.addView(save,lp());
-        Button defaults=new Button(this); defaults.setText("🎯 DOMYŚLNY OBSZAR — TEN HUD"); defaults.setOnClickListener(v->{x.setText("25");y.setText("87");w.setText("7");h.setText("9");}); root.addView(defaults,lp());
+        Button save=new Button(this); save.setText("💾 ZAPISZ OBSZAR HUD"); save.setOnClickListener(v->{prefs.edit().putInt("x",num(x,0)).putInt("y",num(y,80)).putInt("w",num(w,35)).putInt("h",num(h,20)).apply(); Toast.makeText(this,"Obszar HUD zapisany",Toast.LENGTH_SHORT).show();}); root.addView(save,lp());
+        Button defaults=new Button(this); defaults.setText("🎯 DOMYŚLNY OBSZAR — DOLNY LEWY HUD"); defaults.setOnClickListener(v->{x.setText("0");y.setText("80");w.setText("35");h.setText("20");}); root.addView(defaults,lp());
         times=t("",14); times.setPadding(4,20,4,4); root.addView(times,lp());
         updateTimes();
         scroll.addView(root); setContentView(scroll);
